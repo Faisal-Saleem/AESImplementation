@@ -13,64 +13,55 @@ namespace Cryptography
 	{
 		public string Encrypt(string plainText, string key)
 		{
-			byte[] keyBytes = Encoding.UTF8.GetBytes(key);
-			byte[] validKeyBytes = new byte[32]; // AES 256-bit key size
-
-			Array.Copy(keyBytes, validKeyBytes, Math.Min(keyBytes.Length, validKeyBytes.Length));
-
-			using (Aes aesAlg = Aes.Create())
-			{
+			var keyBytes = Encoding.UTF8.GetBytes(key);
+			var validKeyBytes = new byte[32]; // AES 256-bit key size
+	
+	            	Buffer.BlockCopy(keyBytes, 0, validKeyBytes, 0, Math.Min(keyBytes.Length, validKeyBytes.Length));
+	
+		    	using (Aes aesAlg = Aes.Create())
+		    	{
 				aesAlg.Key = validKeyBytes;
 				aesAlg.GenerateIV();
-
-				byte[] iv = aesAlg.IV;
-
-				using (MemoryStream msEncrypt = new MemoryStream())
+	
+				var iv = aesAlg.IV;
+	
+				using (ICryptoTransform encryptor = aesAlg.CreateEncryptor())
 				{
-					using (CryptoStream csEncrypt = new CryptoStream(msEncrypt, aesAlg.CreateEncryptor(), CryptoStreamMode.Write))
-					{
-						byte[] plainTextBytes = Encoding.UTF8.GetBytes(plainText);
-						csEncrypt.Write(plainTextBytes, 0, plainTextBytes.Length);
-						csEncrypt.FlushFinalBlock();
-
-						byte[] encryptedBytes = msEncrypt.ToArray();
-						byte[] combinedBytes = iv.Concat(encryptedBytes).ToArray();
-						return Convert.ToBase64String(combinedBytes);
-					}
+			    		var plainTextBytes = Encoding.UTF8.GetBytes(plainText);
+			   		var encryptedBytes = encryptor.TransformFinalBlock(plainTextBytes, 0, plainTextBytes.Length);
+			    		var combinedBytes = new byte[iv.Length + encryptedBytes.Length];
+			    		Buffer.BlockCopy(iv, 0, combinedBytes, 0, iv.Length);
+			    		Buffer.BlockCopy(encryptedBytes, 0, combinedBytes, iv.Length, encryptedBytes.Length);
+			    		return Convert.ToBase64String(combinedBytes);
 				}
-			}
+		    	}
 		}
 
 		public string Decrypt(string cipherText, string key)
 		{
-			byte[] combinedBytes = Convert.FromBase64String(cipherText);
-			byte[] keyBytes = Encoding.UTF8.GetBytes(key);
-			byte[] validKeyBytes = new byte[32]; // AES 256-bit key size
-
-			Array.Copy(keyBytes, validKeyBytes, Math.Min(keyBytes.Length, validKeyBytes.Length));
-
-			byte[] iv = new byte[16]; // IV size
-			Array.Copy(combinedBytes, iv, iv.Length);
-
-			byte[] encryptedData = new byte[combinedBytes.Length - iv.Length];
-			Array.Copy(combinedBytes, iv.Length, encryptedData, 0, encryptedData.Length);
-
-			using (Aes aesAlg = Aes.Create())
-			{
-				aesAlg.Key = validKeyBytes;
-				aesAlg.IV = iv;
-
-				using (MemoryStream msDecrypt = new MemoryStream(encryptedData))
-				{
-					using (CryptoStream csDecrypt = new CryptoStream(msDecrypt, aesAlg.CreateDecryptor(), CryptoStreamMode.Read))
-					{
-						using (StreamReader srDecrypt = new StreamReader(csDecrypt))
-						{
-							return srDecrypt.ReadToEnd();
-						}
-					}
-				}
-			}
+			 var combinedBytes = Convert.FromBase64String(cipherText);
+		         var keyBytes = Encoding.UTF8.GetBytes(key);
+		         var validKeyBytes = new byte[32]; // AES 256-bit key size
+		         Buffer.BlockCopy(keyBytes, 0, validKeyBytes, 0, Math.Min(keyBytes.Length, validKeyBytes.Length));
+		
+		         var iv = new byte[16]; // IV size
+		         Buffer.BlockCopy(combinedBytes, 0, iv, 0, iv.Length);
+		
+		         int cipherTextLength = combinedBytes.Length - iv.Length;
+		         var encryptedData = new byte[cipherTextLength];
+		         Buffer.BlockCopy(combinedBytes, iv.Length, encryptedData, 0, cipherTextLength);
+		
+		         using (Aes aesAlg = Aes.Create())
+		         {
+		             aesAlg.Key = validKeyBytes;
+		             aesAlg.IV = iv;
+		
+		             using (ICryptoTransform decryptor = aesAlg.CreateDecryptor())
+		             {
+		                 var decryptedBytes = decryptor.TransformFinalBlock(encryptedData, 0, encryptedData.Length);
+		                 return Encoding.UTF8.GetString(decryptedBytes);
+		             }
+		         }
 		}
 	}
 }
